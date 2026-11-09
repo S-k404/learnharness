@@ -1,0 +1,14 @@
+node_modules
+.next/cache
+data
+auth.json
+chatgpt-credentials.json*
+github-copilot-credentials.json*
+xai-credentials.json*
+.env*
+dist
+.git
+.github
+.fresh-data
+real-data-extraction
+*.log

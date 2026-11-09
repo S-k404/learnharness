@@ -1,0 +1,54 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Production Standalone Server (Default)
+  # Uses the optimized multi-stage build, minimal footprint (~280MB), and socat bridge.
+  # ---------------------------------------------------------------------------
+  learnharness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: learnharness:latest
+    container_name: learnharness
+    restart: unless-stopped
+    ports:
+      - "${LH_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - LH_DATA_DIR=/app/data
+      - LH_AUTH_FILE=/app/auth.json
+      - ENABLE_HOST_BRIDGE=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./auth.json:/app/auth.json
+
+  # ---------------------------------------------------------------------------
+  # Live Development Mode (Profile: dev)
+  # Run with: docker compose --profile dev up learnharness-dev
+  # Mounts workspace directory with live Next.js Turbopack reloading.
+  # ---------------------------------------------------------------------------
+  learnharness-dev:
+    image: node:22-bookworm-slim
+    container_name: learnharness-dev
+    profiles: ["dev"]
+    working_dir: /app
+    command: >
+      sh -c "apt-get update && apt-get install -y --no-install-recommends socat ca-certificates &&
+             npm install &&
+             chmod +x docker-entrypoint.sh &&
+             ./docker-entrypoint.sh npm run dev"
+    ports:
+      - "${LH_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - LH_DATA_DIR=/app/data
+      - LH_AUTH_FILE=/app/auth.json
+      - ENABLE_HOST_BRIDGE=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      - /app/node_modules

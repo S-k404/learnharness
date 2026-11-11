@@ -16,9 +16,8 @@
 FROM node:22-bookworm-slim
 WORKDIR /app
 
-# Install lightweight bridge and healthcheck utilities
+# Install healthcheck utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    socat \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -29,14 +28,16 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV LH_DATA_DIR=/app/data
 ENV LH_AUTH_FILE=/app/auth.json
-ENV ENABLE_HOST_BRIDGE=1
-
 # Copy curated standalone server distribution and static assets
 COPY .next/standalone ./
 COPY .next/static ./.next/static
 COPY public ./public
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Install Linux native bindings for canvas rendering, SVG, and image processing
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --no-save @napi-rs/canvas @resvg/resvg-js sharp
 
 VOLUME ["/app/data"]
 

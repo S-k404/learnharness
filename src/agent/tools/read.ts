@@ -95,7 +95,7 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 	return {
 		name: "read",
 		label: "read",
-		description: `Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete. File access settings and protected-location denials apply; use ls without a path to discover allowed folders when restricted.`,
+		description: `Read the contents of a file. Supports text files, images (jpg, png, gif, webp, bmp), and PDFs (text extraction). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete. For scanned or visual PDFs (math, diagrams), dispatch the 'pdf' tool. File access settings and protected-location denials apply; use ls without a path to discover allowed folders when restricted.`,
 		parameters: readInput,
 		execute: serverExecute("read", readInput, async ({ path: rawPath, offset, limit }, { signal }): Promise<string | ImageFileResult> => {
 			const absolute = resolveSourcePath(rawPath);
@@ -114,6 +114,19 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 					text: note.join("\n"),
 					...(processed.ok ? { images: [{ data: processed.data, mimeType: processed.mimeType }] } : {}),
 				};
+			}
+			if (rawPath.toLowerCase().endsWith(".pdf") || (buffer.length >= 4 && buffer.subarray(0, 4).toString() === "%PDF")) {
+				signal?.throwIfAborted();
+				try {
+					const { pdfExtract } = await import("../subagents/pdf-ops.ts");
+					const extractedText = (await pdfExtract(absolute, "all")).trim();
+					if (extractedText.length > 0) {
+						return readTextSlice(`[PDF '${rawPath}' text extracted]:\n\n${extractedText}`, offset, limit);
+					}
+					return `[PDF '${rawPath}' contains scanned images/slides with no embedded text layer. Dispatch the 'pdf' tool with this path to render and visually inspect its pages.]`;
+				} catch (pdfErr) {
+					return `[Error extracting text from PDF '${rawPath}': ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}. Dispatch the 'pdf' tool for full PDF inspection.]`;
+				}
 			}
 			return readTextSlice(buffer.toString("utf-8"), offset, limit);
 		}),

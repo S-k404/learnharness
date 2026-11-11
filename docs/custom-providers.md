@@ -5,7 +5,7 @@ LearnHarness supports **one custom OpenAI-compatible endpoint with multiple mode
 ## Connect
 
 1. Open **Settings → Providers → + Add a provider → Custom endpoint**, or use the first-run provider picker.
-2. Enter the complete API base URL, such as `http://localhost:11434/v1`. LearnHarness **does not append `/v1`**. HTTP/HTTPS and private-network addresses are supported; embedded credentials, query strings, fragments, and discovery redirects are rejected.
+2. Enter the complete API base URL, such as `http://localhost:11434/v1`. LearnHarness **does not append `/v1`**. HTTP/HTTPS and private-network addresses are supported; embedded credentials, query strings, fragments, and discovery redirects are rejected. In Docker, loopback URLs are routed to the host for discovery and inference, on any port; see [Docker setup](../DOCKER.md#2-local-model-endpoints).
 3. Choose **Keyless** or **API key**. Keyless ignores saved/environment custom keys. API key uses `CUSTOM_OPENAI_API_KEY`; a real environment value overrides a saved value, and the editor identifies environment ownership.
 4. Optionally enter model IDs, separated by commas or whitespace, for servers without working model discovery.
 5. Click **Connect**, then select Strong, Cheap, and Vision models.

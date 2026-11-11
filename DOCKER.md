@@ -36,16 +36,14 @@ All mutable records (chats, knowledge graph ledgers, user settings, prompt overr
 
 Nothing is lost when the container is restarted or upgraded.
 
-### 2. Transparent Local Model Bridge
-When LearnHarness runs inside Docker, standard `127.0.0.1` refers to the container itself, not your host Mac. To make local AI models (such as Docker Model Runner / DMR Schema Proxy or Ollama) work without editing existing configuration files, the container entrypoint automatically bridges loopback ports to `host.docker.internal`:
+Docker Desktop can block direct mounts from macOS `Downloads`. To make selected files available without granting Docker access to the whole folder, copy them into the ignored `./learner-files` directory in this repository. Compose mounts that staging directory read-only at `~/Downloads` inside the container, so existing paths such as `/Users/shamit/Downloads/report.pdf` resolve. Original files remain untouched. Other host folders are not mounted; add a read-only bind mount for a specific folder if needed, and add its container-visible path under **Settings → Agent → Tools → File access** when access is restricted.
 
-| Service | Port | Container Loopback Forwarded To |
-| :--- | :--- | :--- |
-| **DMR Schema Proxy** | `12436` | `host.docker.internal:12436` |
-| **Docker Model Runner** | `12434` | `host.docker.internal:12434` |
-| **Ollama** | `11434` | `host.docker.internal:11434` |
+### 2. Local Model Endpoints
+When LearnHarness runs inside Docker, `localhost`, `127.0.0.1`, and `::1` refer to the container. For custom model endpoints, LearnHarness keeps the configured URL in settings and routes loopback URLs to `host.docker.internal` for both model discovery and inference. This works with any endpoint port, including Ollama, LM Studio, and Docker Model Runner.
 
-This means your existing `auth.json` and `settings.json` configured for `http://127.0.0.1:12436/v1` will work **unmodified** both inside Docker and on the host!
+Use the same complete API base URL you use on the host, such as `http://127.0.0.1:1234/v1` or `http://localhost:11434/v1`. Docker Compose configures the host alias. On Linux with a direct `docker run`, add `--add-host=host.docker.internal:host-gateway`. Set `LH_DOCKER_HOST` to a different hostname to override the target, or set it to an empty value when the model server runs inside the LearnHarness container.
+
+The model server must accept connections from Docker. If it only listens on the host's loopback interface and the host's Docker networking cannot reach it, configure the server to listen on a host interface and allow its port through the host firewall.
 
 ---
 

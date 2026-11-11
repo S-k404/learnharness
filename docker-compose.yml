@@ -1,7 +1,7 @@
 services:
   # ---------------------------------------------------------------------------
   # Production Standalone Server (Default)
-  # Uses the optimized multi-stage build, minimal footprint (~280MB), and socat bridge.
+  # Uses the optimized standalone build and host routing for custom local endpoints.
   # ---------------------------------------------------------------------------
   learnharness:
     build:
@@ -17,12 +17,27 @@ services:
       - HOSTNAME=0.0.0.0
       - LH_DATA_DIR=/app/data
       - LH_AUTH_FILE=/app/auth.json
-      - ENABLE_HOST_BRIDGE=1
+      - HOME=/Users/shamit
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
       - ./auth.json:/app/auth.json
+      # Docker Desktop may not be allowed to mount macOS Downloads directly.
+      # Stage selected files in ./learner-files and expose them read-only at
+      # the original Downloads path used in chat.
+      - type: bind
+        source: ./learner-files
+        target: /Users/shamit/Downloads
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./learner-files
+        target: /root/Downloads
+        read_only: true
+        bind:
+          create_host_path: false
 
   # ---------------------------------------------------------------------------
   # Live Development Mode (Profile: dev)
@@ -35,7 +50,7 @@ services:
     profiles: ["dev"]
     working_dir: /app
     command: >
-      sh -c "apt-get update && apt-get install -y --no-install-recommends socat ca-certificates &&
+      sh -c "apt-get update && apt-get install -y --no-install-recommends ca-certificates &&
              npm install &&
              chmod +x docker-entrypoint.sh &&
              ./docker-entrypoint.sh npm run dev"
@@ -46,9 +61,14 @@ services:
       - HOSTNAME=0.0.0.0
       - LH_DATA_DIR=/app/data
       - LH_AUTH_FILE=/app/auth.json
-      - ENABLE_HOST_BRIDGE=1
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/node_modules
+      - type: bind
+        source: ./learner-files
+        target: ${HOME}/Downloads
+        read_only: true
+        bind:
+          create_host_path: false

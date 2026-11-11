@@ -26,6 +26,27 @@ import {
 /** Placeholder bearer for keyless endpoints (the OpenAI client needs *a* key). */
 const KEYLESS_PLACEHOLDER = "not-needed";
 
+/** In Docker, localhost belongs to the app container. Route saved loopback
+ *  endpoints to the configured host alias at request time, preserving the
+ *  user's stored URL and allowing any local server port. Set LH_DOCKER_HOST
+ *  to an empty string to disable this for a container-local backend. */
+export function runtimeCustomProviderBaseUrl(baseUrl: string, dockerHost = process.env.LH_DOCKER_HOST): string {
+	if (!dockerHost) return baseUrl;
+	try {
+		const url = new URL(baseUrl);
+		const host = url.hostname.toLowerCase().replace(/\.$/, "");
+		const unwrapped = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+		const octets = unwrapped.split(".");
+		const isIpv4Loopback = octets.length === 4 && octets[0] === "127" && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
+		const isLoopback = host === "localhost" || host.endsWith(".localhost") || isIpv4Loopback || unwrapped === "::1";
+		if (!isLoopback) return baseUrl;
+		url.hostname = dockerHost;
+		return url.toString().replace(/\/+$/, "");
+	} catch {
+		return baseUrl;
+	}
+}
+
 /** Narrow an unknown to a plain object (not null, not an array). */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,7 +67,7 @@ export function installCustomProviderSource(readAuth = customAuthState): void {
 			const ready = customProviderUsable(cp) && auth.readable && customBindingMatches(cp, auth.binding) && (cp.authMode === "keyless" || customKeyAuthorized(cp, auth));
 			const next = JSON.stringify([cp, auth]); // Private in-memory fingerprint, never a public revision.
 			if (next === fingerprint) return;
-			if (ready) models.setProvider(buildOpenAiCompatibleProvider({ ...cp, baseUrl: cp.baseUrl, models: cp.models ?? [], apiKey: key }));
+			if (ready) models.setProvider(buildOpenAiCompatibleProvider({ ...cp, baseUrl: runtimeCustomProviderBaseUrl(cp.baseUrl), models: cp.models ?? [], apiKey: key }));
 			else models.deleteProvider(CUSTOM_PROVIDER.id);
 			fingerprint = next;
 		},
@@ -129,11 +150,12 @@ export type DiscoverResult =
 export async function discoverModels(baseUrl: string, apiKey?: string): Promise<DiscoverResult> {
 	const base = normalizeBaseUrl(baseUrl);
 	if (!base) return { ok: false, error: "Base URL must be a valid http(s) URL" };
+	const requestBase = runtimeCustomProviderBaseUrl(base);
 	const key = apiKey?.trim();
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 15_000);
 	try {
-		const res = await fetch(`${base}/models`, {
+		const res = await fetch(`${requestBase}/models`, {
 			headers: key ? { authorization: `Bearer ${key}` } : {},
 			signal: controller.signal,
 			redirect: "manual",

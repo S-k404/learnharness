@@ -26,6 +26,7 @@ import {
 	buildOpenAiCompatibleProvider,
 	discoverModels,
 	mergeManualModels,
+	runtimeCustomProviderBaseUrl,
 } from "../src/server/custom-provider.ts";
 import { piModels } from "../src/agent/models.ts";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -41,6 +42,18 @@ describe("normalizeBaseUrl", () => {
 		assert.equal(normalizeBaseUrl("file:///etc/passwd"), "");
 		assert.equal(normalizeBaseUrl("not a url"), "");
 		assert.equal(normalizeBaseUrl(""), "");
+	});
+});
+
+describe("runtimeCustomProviderBaseUrl", () => {
+	it("routes IPv4, IPv6, and localhost endpoints to the Docker host on any port", () => {
+		assert.equal(runtimeCustomProviderBaseUrl("http://127.0.0.1:1234/v1", "host.docker.internal"), "http://host.docker.internal:1234/v1");
+		assert.equal(runtimeCustomProviderBaseUrl("http://localhost:11434/v1", "host.docker.internal"), "http://host.docker.internal:11434/v1");
+		assert.equal(runtimeCustomProviderBaseUrl("http://[::1]:12436/v1", "host.docker.internal"), "http://host.docker.internal:12436/v1");
+	});
+	it("leaves non-loopback and explicitly disabled endpoints unchanged", () => {
+		assert.equal(runtimeCustomProviderBaseUrl("http://192.168.1.20:1234/v1", "host.docker.internal"), "http://192.168.1.20:1234/v1");
+		assert.equal(runtimeCustomProviderBaseUrl("http://localhost:1234/v1", ""), "http://localhost:1234/v1");
 	});
 });
 
@@ -302,6 +315,24 @@ describe("discoverModels", () => {
 			return new Response(JSON.stringify(res.body), { status: res.status });
 		}) as unknown as typeof fetch;
 	}
+
+	it("routes discovery for a loopback endpoint through the configured Docker host", async () => {
+		const previousHost = process.env.LH_DOCKER_HOST;
+		const requested: string[] = [];
+		process.env.LH_DOCKER_HOST = "host.docker.internal";
+		try {
+			stubFetch((url) => {
+				requested.push(url);
+				return { status: 200, body: { data: [{ id: "local-model" }] } };
+			});
+			const result = await discoverModels("http://127.0.0.1:1234/v1");
+			assert.ok(result.ok);
+			assert.deepEqual(requested, ["http://host.docker.internal:1234/v1/models"]);
+		} finally {
+			if (previousHost === undefined) delete process.env.LH_DOCKER_HOST;
+			else process.env.LH_DOCKER_HOST = previousHost;
+		}
+	});
 
 	it("reads OpenAI {data:[{id}]} and Ollama {models:[{id}]} shapes", async () => {
 		stubFetch(() => ({ status: 200, body: { data: [{ id: "b" }, { id: "a" }] } }));

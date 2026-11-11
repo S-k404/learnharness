@@ -128,6 +128,11 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 					return `[Error extracting text from PDF '${rawPath}': ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}. Dispatch the 'pdf' tool for full PDF inspection.]`;
 				}
 			}
+			// Guard against reading raw binary files as plain text token soup
+			const sample = buffer.subarray(0, Math.min(buffer.length, 8000));
+			if (sample.includes(0)) {
+				return `[File '${rawPath}' appears to be binary data (${buffer.length} bytes) and cannot be displayed as plain text.]`;
+			}
 			return readTextSlice(buffer.toString("utf-8"), offset, limit);
 		}),
 	};

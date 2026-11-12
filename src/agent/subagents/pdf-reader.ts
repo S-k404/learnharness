@@ -37,17 +37,20 @@ everything you know.
 Reading doctrine — always in this order:
 1. TRIAGE FIRST: call pdf_info. It returns page count plus per-page signals (text_length,
    image_count, math_density). Never read or render anything before this.
-2. Pick a strategy by document size:
-   - SHORT (≤ 10 pages): extract the full text; render every page that has meaningful
-     math_density or images (you read equations and diagrams visually, not as extracted text).
-   - MEDIUM (11-40 pages): extract promising pages; render only flagged pages (math- or
-     image-heavy, or where extraction looks thin).
-   - LONG (> 40 pages): pdf_search for the question's key terms first; extract and render only
-     the pages that hit. Never read a long document front-to-back.
-3. When the extracted text of a page looks math- or diagram-heavy, or garbled, RENDER that
-   page and read it visually before drawing conclusions from it.
-4. Render DPI guidance: 100 for text-dominant pages, 150 the default, 200 for dense small
-   print (math details, fine diagrams).
+2. Pick a strategy by document size (TEXT-FIRST to conserve context):
+   - SHORT (≤ 10 pages): extract the text with pdf_extract (all pages, or in small batches).
+     Do NOT call pdf_render if pdf_extract returns readable text.
+   - MEDIUM (11-40 pages): use pdf_search or targeted pdf_extract in small page batches
+     (e.g. 3-5 pages at a time) to stay well within context limits. Do NOT call pdf_render
+     on pages that already have selectable text (text_length > 0).
+   - LONG (> 40 pages): pdf_search for the question's key terms first; pdf_extract only the
+     pages that hit, in small batches. Never read a long document front-to-back.
+3. Slide decks and textbooks often report image_count >= 1 on every page due to template
+   graphics or backgrounds. NEVER render pages just because image_count > 0 or math_density > 0
+   when selectable text is present. Only call pdf_render on scanned/image-only pages where
+   text_length is 0 (or near-zero) or where extracted text is completely missing/garbled.
+4. Render DPI guidance (when rendering is strictly necessary): 100 is the default, 150 only
+   for dense small print. Max 2 pages per pdf_render call.
 
 Tool outputs may be error strings (file unreadable, invalid regex, no hits). Adapt: narrow the
 page spec, change the query, lower DPI. If the document genuinely cannot answer the question,
@@ -61,9 +64,9 @@ extracted or rendered.`;
 const MAX_ITERATIONS = 14;
 /** Rendered pages per pdf_render call — the skill renders selectively; a
  *  batch cap keeps one over-eager call from flooding the vision context. */
-const RENDER_BATCH_CAP = 6;
+const RENDER_BATCH_CAP = 2;
 /** Extract output ceiling — narrow the spec instead of dumping a book. */
-const EXTRACT_CAP = 24_000;
+const EXTRACT_CAP = 12_000;
 
 export interface PdfReaderOptions {
 	engine?: PiEngine;
@@ -102,11 +105,11 @@ export function createPdfTools(_pdfPath: string): Record<string, Tool> {
 		pdf_render: {
 			name: "pdf_render",
 			description:
-				"Render pages to images and show them to you for visual reading (equations, diagrams, layout). DPI: 100 text, 150 default, 200 dense small print. Max 6 pages per call.",
+				"Render pages to images for visual reading. Use ONLY for scanned/image-only pages where text_length is 0 or extracted text is completely garbled. DPI: 100 default, 150 dense small print. Max 2 pages per call.",
 			parameters: Type.Object({
-				pages: Type.String({ description: "Page spec, e.g. '1-3' or '2,5,8'" }),
+				pages: Type.String({ description: "Page spec, e.g. '1-2' or '3' (max 2 pages per call)" }),
 				dpi: Type.Optional(
-					Type.Integer({ minimum: 72, maximum: 300, description: "Render DPI (100 text / 150 default / 200 dense)" }),
+					Type.Integer({ minimum: 72, maximum: 300, description: "Render DPI (100 default / 150 dense)" }),
 				),
 			}),
 		},
@@ -164,6 +167,43 @@ function toolText(toolCallId: string, toolName: string, value: string): ToolResu
 const UNREAD_FINISH_MESSAGE =
 	"You finished without consulting any page of the PDF — your brief would be invention, not reading. Extract or render the relevant pages first, then write the brief from what you actually saw.";
 
+/** Bound active conversation history for the PDF reader loop to prevent
+ *  token context window exhaustion (e.g. 16k context limits on local models). */
+function boundReaderContext(messages: Message[]): Message[] {
+	if (messages.length <= 4) return messages;
+
+	const lastImageIndex = messages.findLastIndex(
+		(m) => m.role === "user" && Array.isArray(m.content) && m.content.some((c) => c.type === "image"),
+	);
+
+	return messages.map((m, idx) => {
+		// Replace earlier base64 rendered page images once newer turns have progressed
+		if (idx !== lastImageIndex && m.role === "user" && Array.isArray(m.content)) {
+			const hasImage = m.content.some((c) => c.type === "image");
+			if (hasImage) {
+				const compacted = m.content.map((c) => {
+					if (c.type === "image") {
+						return { type: "text" as const, text: "[Rendered page image previously inspected]" };
+					}
+					return c;
+				});
+				return { ...m, content: compacted };
+			}
+		}
+
+		// Truncate older text extractions from earlier batches to keep prompt size bounded
+		if (idx < messages.length - 4 && m.role === "toolResult" && m.toolName === "pdf_extract") {
+			const first = m.content?.[0];
+			if (first && first.type === "text" && first.text.length > 3000) {
+				const truncated = first.text.slice(0, 1500) + "\n\n[...Earlier extracted text reviewed and summarized to stay within context budget...]";
+				return { ...m, content: [{ type: "text" as const, text: truncated }] };
+			}
+		}
+
+		return m;
+	});
+}
+
 export async function runPdfReaderAgent(
 	input: PdfReaderInput,
 	opts: PdfReaderOptions = {},
@@ -216,6 +256,7 @@ export async function runPdfReaderAgent(
 
 	try {
 		for (let iteration = 0; iteration < maxIterations; iteration++) {
+			messages = boundReaderContext(messages);
 			const result = await streamOnce(
 				streamEngine,
 				INSTRUCTIONS,
@@ -295,7 +336,7 @@ export async function runPdfReaderAgent(
 						toolResults.push(toolText(call.id, call.name, body));
 					} else if (call.name === "pdf_render") {
 						const spec = String(args.pages ?? "1");
-						const dpi = numOr(args.dpi, 150);
+						const dpi = numOr(args.dpi, 100);
 						const wanted = specNumbers(spec, RENDER_BATCH_CAP);
 						opts.onActivity?.(`pdf_render: ${spec} @${dpi}dpi`);
 						const pages = await headless.renderPdfPages(pdfPath, wanted, { dpi });

@@ -16,19 +16,19 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - LH_DATA_DIR=/app/data
-      - LH_AUTH_FILE=/app/auth.json
-      - HOME=/Users/shamit
+      - LH_AUTH_FILE=/app/auth-dir/auth.json
+      - HOME=${HOME:-/root}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
-      - ./auth.json:/app/auth.json
+      - ./auth-dir:/app/auth-dir
       # Docker Desktop may not be allowed to mount macOS Downloads directly.
       # Stage selected files in ./learner-files and expose them read-only at
       # the original Downloads path used in chat.
       - type: bind
         source: ./learner-files
-        target: /Users/shamit/Downloads
+        target: ${HOME:-/root}/Downloads
         read_only: true
         bind:
           create_host_path: false

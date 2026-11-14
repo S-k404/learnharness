@@ -19,8 +19,8 @@ if [ ! -f "$AUTH_FILE" ]; then
 fi
 
 # Ensure Downloads symlink for ~ compatibility
-if [ -d /Users/shamit/Downloads ] && [ ! -e /root/Downloads ]; then
-    ln -s /Users/shamit/Downloads /root/Downloads 2>/dev/null || true
+if [ -n "${HOME:-}" ] && [ -d "${HOME}/Downloads" ] && [ ! -e /root/Downloads ]; then
+    ln -s "${HOME}/Downloads" /root/Downloads 2>/dev/null || true
 fi
 
 echo "[docker-entrypoint] Starting LearnHarness on ${HOSTNAME:-0.0.0.0}:${PORT:-3000} (LH_DATA_DIR=$DATA_DIR)..."

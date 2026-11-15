@@ -53,6 +53,17 @@ export const KEEP_RECENT_TOKENS = 20_000;
  * (not the user's threshold) is the binding constraint (pi's default). */
 export const COMPACTION_RESERVE_TOKENS = 16_384;
 
+/** The reserve for a window: the factory 16k, at most a quarter of a small window (owner, 2026-11-15: with a 32K local model a 16k
+ *  reserve plus the 20k kept tail could never fit, so compaction never ran and a chat that read two PDFs answered one word). */
+export function reserveTokensFor(contextWindowTokens: number | undefined): number {
+	return contextWindowTokens === undefined ? COMPACTION_RESERVE_TOKENS : Math.min(COMPACTION_RESERVE_TOKENS, Math.max(1, Math.floor(contextWindowTokens / 4)));
+}
+
+/** The kept tail for a threshold: the factory 20k, at most half the threshold, so the summary always has room beside it. */
+export function keepRecentTokensFor(thresholdTokens: number): number {
+	return Math.min(KEEP_RECENT_TOKENS, Math.max(1, Math.floor(thresholdTokens / 2)));
+}
+
 /** Factory default for the settings threshold (owner ruling: 150k). */
 export const DEFAULT_COMPACTION_THRESHOLD_TOKENS = 150_000;
 

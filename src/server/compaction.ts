@@ -34,6 +34,8 @@ import {
 	buildCompactionPrompt,
 	compactionCutIndex,
 	COMPACTION_RESERVE_TOKENS,
+	keepRecentTokensFor,
+	reserveTokensFor,
 	estimateContextTokens,
 	estimateTokens,
 	newCompactionMarker,
@@ -155,7 +157,7 @@ export async function awaitCompaction(chatId: string): Promise<void> {
 export function effectiveThresholdTokens(settingTokens: number | undefined, contextWindowTokens: number | undefined): number {
 	const setting = settingTokens ?? 150_000;
 	if (contextWindowTokens === undefined) return setting;
-	return Math.min(setting, Math.max(contextWindowTokens - COMPACTION_RESERVE_TOKENS, 1));
+	return Math.min(setting, Math.max(contextWindowTokens - reserveTokensFor(contextWindowTokens), 1));
 }
 
 // ─── the estimate over the ACTIVE projection ────────────────────────────────
@@ -197,7 +199,7 @@ async function compact(deps: CompactionDeps, chatId: string): Promise<void> {
 	const tokensBefore = projectedContextTokens(deps.projectMessages?.(record) ?? messages, deps.systemPromptTokens, model);
 	if (tokensBefore <= deps.thresholdTokens) return; // settled beneath while we waited
 
-	const cut = compactionCutIndex(messages, undefined, model);
+	const cut = compactionCutIndex(messages, keepRecentTokensFor(deps.thresholdTokens), model);
 	if (cut <= 0 || cut >= messages.length) return; // no history can be dropped
 
 	// The previous compaction's kept boundary (chained compactions

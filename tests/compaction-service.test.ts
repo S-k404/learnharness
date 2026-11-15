@@ -32,6 +32,7 @@ const {
 	projectedContextTokens,
 } = await import("../src/server/compaction.ts");
 import type { CompactionDeps } from "../src/server/compaction.ts";
+const { keepRecentTokensFor, reserveTokensFor } = await import("../src/core/compaction.ts");
 import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
 const { subscribe } = await import("../src/core/events.ts");
 const { activeCompactionOf, newCompactionMarker, newUserMessage, measuredContextTokens, toLlmMessages, COMPACTED_HISTORY_HEADER } = await import("../src/core/index.ts");
@@ -619,6 +620,16 @@ describe("the compaction service", () => {
 			else env.NODE_ENV = originalNodeEnv;
 			off();
 		}
+	});
+
+	it("a 32K local model compacts: the reserve is at most a quarter of the window and the kept tail at most half the threshold (2026-11-15)", () => {
+		assert.equal(reserveTokensFor(32_768), 8_192);
+		assert.equal(reserveTokensFor(200_000), 16_384);
+		assert.equal(effectiveThresholdTokens(150_000, 32_768), 32_768 - 8_192);
+		const threshold = effectiveThresholdTokens(150_000, 32_768);
+		assert.equal(keepRecentTokensFor(threshold), 12_288);
+		assert.ok(keepRecentTokensFor(threshold) < threshold, "the kept tail leaves room for the summary");
+		assert.equal(keepRecentTokensFor(effectiveThresholdTokens(150_000, 200_000)), 20_000, "big windows keep the factory tail");
 	});
 
 	it("effectiveThresholdTokens: the setting rules big windows; the window rule binds small ones", () => {

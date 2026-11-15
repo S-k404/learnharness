@@ -59,7 +59,7 @@ import { hasProbeDone, hasUnresolvedQuestion, pendingPluginQuestionOf, pluginQue
 import { samePluginQuestionOccurrence } from "../core/plugin-questions.ts";
 import { composeInstructions } from "../agent/teacher-agent.ts";
 import { ensureCompacted, kickCompaction, effectiveThresholdTokens, projectedContextTokens, compactionInFlight } from "./compaction.ts";
-import { COMPACTION_RESERVE_TOKENS } from "../core/compaction.ts";
+import { reserveTokensFor } from "../core/compaction.ts";
 import { catalogContextLimits, refreshConnectionCatalog } from "./model-catalog.ts";
 import { emit } from "../core/events.ts";
 import { settledTurnResponse } from "./turn-runs.ts";
@@ -378,7 +378,7 @@ export async function handleChatInput(
 		const savedIds = new Set(saved.map((message) => message.id));
 		const reportHistory = saved.length ? [...saved, ...live.filter((message) => !savedIds.has(message.id))] : live;
 		const window = sideContextWindow(reportHistory, conversationEngine.model, contextWindow, input.type === "retry");
-		const budget = window === undefined ? thresholdTokens : Math.max(1, window - Math.min(COMPACTION_RESERVE_TOKENS, conversationEngine.model.maxTokens));
+		const budget = window === undefined ? thresholdTokens : Math.max(1, window - Math.min(reserveTokensFor(window), conversationEngine.model.maxTokens));
 		return projectedContextTokens(live, systemPromptTokens, estimateModel) <= budget;
 	};
 	const sideBudgetError = () => new Error(SIDE_CONTEXT_BUDGET_ERROR);

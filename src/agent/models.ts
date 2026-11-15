@@ -30,6 +30,9 @@ export const APP_IDENTITY = Object.freeze({
 	attribution: Object.freeze({ name: packageMetadata.name, url: packageMetadata.homepage }),
 });
 
+/** Retries (0.5 s, 1 s, 2 s apart) for a custom endpoint's request that never connected. */
+const CUSTOM_CONNECT_RETRIES = 3;
+
 /**
  * The one engine factory every agent's model comes from (the pi-ai swap,
  * docs/archive/pi-engine-swap.md). BYOK ALL THE WAY DOWN (owner, 2026-09-22):
@@ -176,7 +179,9 @@ export function piEngineForSpec(spec: ResolvedModelSpec, background: boolean | (
 				const currentLevel = thinkingPreference
 					? clampThinkingLevel(currentModel, thinkingPreference)
 					: defaultThinkingLevel(currentModel);
-				return current.streamSimple(permitImages(currentModel), context, { ...requestOptions, reasoning: currentLevel === "off" ? undefined : currentLevel });
+				// A local server drops the odd connection while it swaps or loads a model;
+				// pi retries only before the first streamed byte, so nothing is repeated.
+				return current.streamSimple(permitImages(currentModel), context, { ...requestOptions, maxRetries: requestOptions.maxRetries ?? CUSTOM_CONNECT_RETRIES, reasoning: currentLevel === "off" ? undefined : currentLevel });
 			}
 			const purpose = typeof background === "function" ? background : () => background;
 			const stream = spec.provider === "chatgpt" ? chatGPTStream(purpose, lifecycle) : nativeId ? nativeSubscriptionStream(models.getProvider(nativeId)!, purpose, lifecycle) : models.streamSimple.bind(models);

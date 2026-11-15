@@ -120,6 +120,17 @@ test("existing engine refuses nonce mismatch on EVERY operation, without falling
 	persistCustomAuth({ ...readCustomAuth().binding!, id: "b".repeat(32) }, "different-key");
 	assert.equal((await run(engine)).stopReason, "error"); assert.equal(requests.length, 1);
 });
+test("a dropped connection to the custom endpoint is retried before anything streams", async () => {
+	let drops = 2;
+	globalThis.fetch = async (url, init) => { capture(url, init); if (drops-- > 0) throw new TypeError("fetch failed"); return answer(); };
+	const result = await run(piEngineForSpec({ provider: "custom", id: "m" }));
+	assert.equal(result.stopReason, "stop", result.errorMessage);
+	assert.equal(requests.length, 3);
+	globalThis.fetch = async (url, init) => { capture(url, init); throw new TypeError("fetch failed"); };
+	requests = [];
+	assert.equal((await run(piEngineForSpec({ provider: "custom", id: "m" }))).stopReason, "error", "still fails when the server stays down");
+	assert.equal(requests.length, 4);
+});
 test("keyless publication never reads the credential lookup", async () => {
 	configure("http://first/v1", false, 512, "keyless");
 	let credentialLookups = 0;

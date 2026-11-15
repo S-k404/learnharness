@@ -339,6 +339,9 @@ describe("pi thinking truth (pinned against pi-ai upgrades)", () => {
 		assert.throws(() => piEngineFor("prober"), /no configured model for role "prober"/);
 	});
 });
+/** The lookup also searches these fixed dirs, which no PATH or HOME change can hide. */
+const systemClaude = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find((p) => fs.existsSync(p));
+const needsNoSystemClaude = systemClaude && process.platform !== "win32" ? `${systemClaude} is installed` : false;
 /** Runs fn with PATH and HOME pointed at a temp dir, so the CLI lookup only
  *  finds a claude binary when installed is true. */
 function withClaudeInstalled(installed: boolean, fn: () => void, enabled = true): void {
@@ -382,7 +385,7 @@ describe("the claude-code provider (native CLI authentication, no LearnHarness k
 		});
 	});
 
-	it("catalogProviders() marks claude-code absent and modelCatalog() hides it when the CLI is missing", () => {
+	it("catalogProviders() marks claude-code absent and modelCatalog() hides it when the CLI is missing", { skip: needsNoSystemClaude }, () => {
 		withClaudeInstalled(false, () => {
 			const row = catalogProviders().find((p) => p.id === "claude-code");
 			assert.equal(row?.keyPresent, false);
@@ -405,7 +408,7 @@ describe("the claude-code provider (native CLI authentication, no LearnHarness k
 		assert.equal(engine.model.id, "sonnet");
 	});
 
-	it('providerKeyPresent("claude-code") requires both explicit opt-in and executable presence', () => {
+	it('providerKeyPresent("claude-code") requires both explicit opt-in and executable presence', { skip: needsNoSystemClaude }, () => {
 		withClaudeInstalled(true, () => assert.equal(providerKeyPresent("claude-code"), true));
 		withClaudeInstalled(false, () => assert.equal(providerKeyPresent("claude-code"), false));
 		withClaudeInstalled(true, () => {

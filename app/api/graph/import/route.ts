@@ -21,6 +21,7 @@
  * /api/graph/status, as with session runs.
  */
 import { convertPdf, extraction, joinPages, NotesImportError, sourceDirectory } from "@/src/server";
+import { convertPptx, joinSlides, looksLikePptx } from "@/src/agent/subagents/pptx-markdown.ts";
 import { IMPORT_EXTENSIONS, MAX_IMPORT_BODY_BYTES, MAX_IMPORT_BYTES, UNSUPPORTED_TYPE_MESSAGE, validNotesPath } from "@/lib/notes-import-limits.ts";
 import { FormBodyLimitError, readBoundedFormData } from "@/lib/bounded-form-data.ts";
 import {
@@ -57,10 +58,18 @@ const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
 
 type NotesFile = { kind: "notes"; text: string; notice?: string } | { kind: "refused"; error: string };
 
-/** A PDF becomes page-marked Markdown; any other accepted file is read as text. */
+/** A PDF becomes page-marked Markdown, a PowerPoint deck slide-marked Markdown; any other accepted file is read as text. */
 async function readNotesFile(file: File): Promise<NotesFile> {
 	if (!IMPORT_EXTENSIONS.test(file.name)) return { kind: "refused", error: UNSUPPORTED_TYPE_MESSAGE };
 	const bytes = new Uint8Array(await file.arrayBuffer());
+	if (looksLikePptx(file.name, bytes)) {
+		const deck = convertPptx(bytes);
+		if (deck.kind === "unreadable") return { kind: "refused", error: "Could not open this PowerPoint deck." };
+		const text = joinSlides(deck.slides);
+		if (!text) return { kind: "refused", error: "This deck has no text on its slides (pictures only)." };
+		const pictures = deck.slides.reduce((n, s) => n + s.pictures, 0);
+		return { kind: "notes", text, notice: pictures ? `${pictures} ${pictures === 1 ? "picture" : "pictures"} in this deck ${pictures === 1 ? "was" : "were"} not read; only its text was.` : undefined };
+	}
 	if (!PDF_MAGIC.every((byte, i) => bytes[i] === byte)) {
 		if (bytes.subarray(0, 8192).includes(0)) return { kind: "refused", error: "This file isn't plain text." };
 		return { kind: "notes", text: new TextDecoder().decode(bytes) };

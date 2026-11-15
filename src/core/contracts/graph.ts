@@ -337,6 +337,21 @@ export interface Position {
  *  place. */
 export const TITLE_MAX_CHARS = 72;
 
+/** Files attached to a message arrive in its text as backticked paths
+ *  (`/Users/…/AP - Module 4.pdf`). A title shows what was asked, then just
+ *  the files' names (owner, 2026-11-15: a chat was titled by the first
+ *  path, cut off mid-way). */
+const ATTACHED_PATH = /`([^`\n]*\/[^`\n]+)`/g;
+function withoutAttachedPaths(prompt: string): string {
+	const names: string[] = [];
+	const asked = prompt.replace(ATTACHED_PATH, (_match, file: string) => {
+		names.push(file.split(/[\\/]/).filter(Boolean).pop() ?? file);
+		return " ";
+	});
+	if (!names.length) return prompt;
+	return [asked.replace(/\s+/g, " ").trim(), names.join(", ")].filter(Boolean).join(" — ");
+}
+
 /** Derive a short chat title from the learner's first message (pure).
  *  Smart truncation (owner, 2026-10-06): the cut snaps to a word boundary
  *  AT OR UNDER the cap — a title never ends mid-word. The one exception
@@ -345,7 +360,7 @@ export const TITLE_MAX_CHARS = 72;
  *  single spaces first, so boundaries are always single-space boundaries.
  *  Used on chat creation; deterministic so tests can pin it. */
 export function titleFromPrompt(prompt: string): string {
-	const oneLine = prompt.replace(/\s+/g, " ").trim();
+	const oneLine = withoutAttachedPaths(prompt).replace(/\s+/g, " ").trim();
 	if (oneLine.length <= TITLE_MAX_CHARS) return oneLine;
 	// Last space among the first TITLE_MAX_CHARS characters; the cut sits
 	// before it so no trailing space rides into the title.

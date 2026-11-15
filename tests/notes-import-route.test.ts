@@ -156,11 +156,11 @@ it("an off-list type and a non-text file are refused with a short message before
 	try {
 		const pdf = tinyPdf([{ runs: [{ text: "Slide text", x: 72, y: 700 }] }]);
 		const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
-		const { results } = await (await POST(upload([{ name: "deck.pptx", bytes: "plain words" }, { name: "slides.pptx", bytes: pdf }, { name: "notes.txt", bytes: zip }]))).json();
+		const { results } = await (await POST(upload([{ name: "deck.docx", bytes: "plain words" }, { name: "slides.pptx", bytes: pdf }, { name: "notes.txt", bytes: zip }]))).json();
 		assert.deepEqual(results.map((r: { filePath: string; ok: boolean; outcome: string; error: string }) => [r.filePath, r.ok, r.outcome, r.error]).sort(), [
-			["deck.pptx", false, "failed", "This file type isn't supported. Use text, Markdown, or PDF."],
+			["deck.docx", false, "failed", "This file type isn't supported. Use text, Markdown, PDF, or PowerPoint (.pptx)."],
 			["notes.txt", false, "failed", "This file isn't plain text."],
-			["slides.pptx", false, "failed", "This file type isn't supported. Use text, Markdown, or PDF."],
+			["slides.pptx", false, "failed", "Could not open this PowerPoint deck."],
 		]);
 		assert.equal(imports, 0); assert.deepEqual(registered, []);
 	} finally { sourceDirectory.registerImport = realRegister; }

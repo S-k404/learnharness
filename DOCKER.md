@@ -6,10 +6,11 @@ LearnHarness can be run fully containerized inside Docker using Docker Compose o
 
 ## Quick Start (Production Standalone)
 
-To build and start the standalone container:
+To build and start the standalone container (the image copies the app built on this Mac, `.next/standalone`, so build it first: without `npm run build`, `docker compose up --build` reuses the previous build and none of your changes reach the container):
 
 ```bash
 cd ~/Documents/learn-harness
+npm run build
 docker compose up --build -d
 ```
 

@@ -5,6 +5,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { serverExecute, type ImageFileResult } from "../tool-execute.ts";
 import { resolveSourcePath } from "./fs-shared.ts";
 import { detectSupportedImageMimeTypeFromFile, processImage } from "../image-processing/index.ts";
+import { convertPptx, joinSlides, looksLikePptx } from "../subagents/pptx-markdown.ts";
 
 /**
  * The read tool — sources v0 (2026-09): a Node port of pi's read semantics
@@ -95,7 +96,7 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 	return {
 		name: "read",
 		label: "read",
-		description: `Read the contents of a file. Supports text files, images (jpg, png, gif, webp, bmp), and PDFs (text extraction). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete. For scanned or visual PDFs (math, diagrams), dispatch the 'pdf' tool. File access settings and protected-location denials apply; use ls without a path to discover allowed folders when restricted.`,
+		description: `Read the contents of a file. Supports text files, images (jpg, png, gif, webp, bmp), PDFs (text extraction) and PowerPoint .pptx decks (each slide's text, tables, equations and speaker notes, in slide order). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete. For scanned or visual PDFs (math, diagrams), dispatch the 'pdf' tool. File access settings and protected-location denials apply; use ls without a path to discover allowed folders when restricted.`,
 		parameters: readInput,
 		execute: serverExecute("read", readInput, async ({ path: rawPath, offset, limit }, { signal }): Promise<string | ImageFileResult> => {
 			const absolute = resolveSourcePath(rawPath);
@@ -127,6 +128,16 @@ export function createReadTool(model?: ReadModel): AgentTool<typeof readInput> {
 				} catch (pdfErr) {
 					return `[Error extracting text from PDF '${rawPath}': ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}. Dispatch the 'pdf' tool for full PDF inspection.]`;
 				}
+			}
+			if (looksLikePptx(rawPath, buffer)) {
+				const deck = convertPptx(buffer);
+				if (deck.kind === "unreadable") return `[Could not open PowerPoint '${rawPath}': ${deck.reason}.]`;
+				const markdown = joinSlides(deck.slides);
+				if (!markdown) return `[PowerPoint '${rawPath}' has ${deck.slides.length} slides and no text on them (pictures only).]`;
+				return readTextSlice(`[PowerPoint '${rawPath}': ${deck.slides.length} slides, text extracted in slide order]:\n\n${markdown}`, offset, limit);
+			}
+			if (/\.ppt$/i.test(rawPath)) {
+				return `[File '${rawPath}' is an old binary PowerPoint (.ppt), which cannot be read as text. Save it as .pptx (or PDF) and attach that.]`;
 			}
 			// Guard against reading raw binary files as plain text token soup
 			const sample = buffer.subarray(0, Math.min(buffer.length, 8000));

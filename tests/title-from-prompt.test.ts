@@ -47,6 +47,15 @@ describe("titleFromPrompt (smart truncation)", () => {
 		assert.equal(titleFromPrompt(giant), `${"x".repeat(TITLE_MAX_CHARS)}…`);
 	});
 
+	it("attached files: what was asked, then the files' names, never their paths", () => {
+		assert.equal(
+			titleFromPrompt("`/Users/me/Downloads/AP - Module 4.pdf` `/Users/me/Downloads/AP-Module 3 .pdf` explain this"),
+			"explain this — AP - Module 4.pdf, AP-Module 3 .pdf",
+		);
+		assert.equal(titleFromPrompt("`/data/notes.md`"), "notes.md");
+		assert.equal(titleFromPrompt("what does `x = 1` mean"), "what does `x = 1` mean", "inline code without a path stays");
+	});
+
 	it("the kept title never carries a trailing space", () => {
 		const prompt = `${"c".repeat(60)}  ${"d".repeat(60)}`; // collapses to one space
 		const out = titleFromPrompt(prompt);

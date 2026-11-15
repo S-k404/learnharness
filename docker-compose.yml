@@ -11,13 +11,14 @@ services:
     container_name: learnharness
     restart: unless-stopped
     ports:
-      - "${LH_PORT:-3000}:3000"
+      - "127.0.0.1:${LH_PORT:-3000}:3000"
     environment:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - LH_DATA_DIR=/app/data
       - LH_AUTH_FILE=/app/auth-dir/auth.json
-      - HOME=${HOME:-/root}
+      - LH_ALLOWED_HOSTS=${LH_ALLOWED_HOSTS:-MacBook-Pro.local}
+      - HOME=${REAL_HOME:-${HOME:-/root}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -28,7 +29,7 @@ services:
       # the original Downloads path used in chat.
       - type: bind
         source: ./learner-files
-        target: ${HOME:-/root}/Downloads
+        target: ${REAL_HOME:-${HOME:-/root}}/Downloads
         read_only: true
         bind:
           create_host_path: false
@@ -68,7 +69,7 @@ services:
       - /app/node_modules
       - type: bind
         source: ./learner-files
-        target: ${HOME}/Downloads
+        target: ${REAL_HOME:-${HOME}}/Downloads
         read_only: true
         bind:
           create_host_path: false

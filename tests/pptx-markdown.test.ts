@@ -12,7 +12,7 @@ import { after, describe, it } from "node:test";
 import { convertPptx, joinSlides, looksLikePptx } from "../src/agent/subagents/pptx-markdown.ts";
 import { createReadTool } from "../src/agent/tools/read.ts";
 import { POST } from "../app/api/graph/import/route.ts";
-import { extraction } from "../src/server/index.ts";
+import { extraction, sourceDirectory } from "../src/server/index.ts";
 import { textBox, tinyPptx } from "./helpers/tiny-pptx.ts";
 
 const EQUATION = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="a14"><p:sp><p:nvSpPr><p:cNvPr id="5" name="Eq"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:txBody><a:p><a14:m xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:oMath><m:r><m:t>V = IR</m:t></m:r></m:oMath></m:oMathPara></a14:m></a:p></p:txBody></p:sp></mc:Choice><mc:Fallback><p:sp><p:txBody><a:p><a:r><a:t>V = IR (picture)</a:t></a:r></a:p></p:txBody></p:sp><p:pic/></mc:Fallback></mc:AlternateContent>`;
@@ -72,8 +72,9 @@ describe("PowerPoint decks", () => {
 
 	it("the notes import takes a .pptx into the knowledge graph as slide-marked Markdown", async () => {
 		const received: string[] = [];
-		const real = extraction.importNotes;
+		const real = extraction.importNotes, realRegister = sourceDirectory.registerImport;
 		extraction.importNotes = async ({ text }) => { received.push(text); return { nodes: 0, chains: 0 }; };
+		sourceDirectory.registerImport = () => {};   // never the graph's real source list
 		try {
 			const form = new FormData();
 			form.append("files", new File([deck], "Module 3 PPT.pptx"));
@@ -82,6 +83,6 @@ describe("PowerPoint decks", () => {
 			assert.equal(results[0].outcome, "completed", JSON.stringify(results[0]));
 			assert.match(results[0].notice ?? "", /1 picture in this deck was not read/);
 			assert.match(received[0] ?? "", /^## Slide 1 — Sensors/);
-		} finally { extraction.importNotes = real; }
+		} finally { extraction.importNotes = real; sourceDirectory.registerImport = realRegister; }
 	});
 });

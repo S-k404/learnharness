@@ -17,7 +17,7 @@ services:
       - HOSTNAME=0.0.0.0
       - LH_DATA_DIR=/app/data
       - LH_AUTH_FILE=/app/auth-dir/auth.json
-      - LH_ALLOWED_HOSTS=${LH_ALLOWED_HOSTS:-MacBook-Pro.local}
+      - LH_ALLOWED_HOSTS=${LH_ALLOWED_HOSTS:-localhost}
       - HOME=${REAL_HOME:-${HOME:-/root}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
